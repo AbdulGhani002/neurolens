@@ -1,46 +1,112 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageShell from "../components/PageShell";
 import TokenChips from "../components/graphics/TokenChips";
-import {
-  tokenizeWordPiece,
-  tokenizeSentencePiece,
-  tokenizeBPE,
-} from "../utils/tokenizers";
+import ModelLoader from "../components/ModelLoader";
+import { useTokenizer } from "../hooks/useTransformer";
+import { Token } from "../utils/tokenizers";
 
 const PRESETS = [
   "The cat sat on the mat.",
   "She opened the door quickly.",
   "translate English to Urdu: good morning",
-  "Unhappiness is preprocessing the tokenization.",
+  "Unhappiness is preprocessing tokenization.",
+  "Multilingual transformers tokenize Bismillah بسم الله",
+];
+
+const MODELS = [
+  {
+    id: "Xenova/bert-base-uncased",
+    title: "WordPiece",
+    subtitle: "bert-base-uncased · 30,522 tokens",
+    accent: "cyan" as const,
+    marker: (
+      <>
+        <span className="font-mono text-accent-cyan">##prefix</span> = sub-piece
+      </>
+    ),
+  },
+  {
+    id: "Xenova/t5-small",
+    title: "SentencePiece",
+    subtitle: "t5-small · 32,128 tokens",
+    accent: "violet" as const,
+    marker: (
+      <>
+        <span className="font-mono text-accent-violet">▁prefix</span> = word-start
+      </>
+    ),
+  },
+  {
+    id: "Xenova/gpt2",
+    title: "BPE",
+    subtitle: "gpt-2 · 50,257 tokens",
+    accent: "coral" as const,
+    marker: (
+      <>
+        <span className="font-mono text-accent-coral">Ġprefix</span> = leading space
+      </>
+    ),
+  },
 ];
 
 export default function Tokenizer() {
   const [input, setInput] = useState(PRESETS[2]);
 
-  const results = useMemo(
-    () => ({
-      wp: tokenizeWordPiece(input),
-      sp: tokenizeSentencePiece(input),
-      bpe: tokenizeBPE(input),
-    }),
-    [input]
-  );
+  const bert = useTokenizer("Xenova/bert-base-uncased");
+  const t5 = useTokenizer("Xenova/t5-small");
+  const gpt = useTokenizer("Xenova/gpt2");
+
+  const allReady = bert.status === "ready" && t5.status === "ready" && gpt.status === "ready";
+  const anyLoading =
+    bert.status === "loading" || t5.status === "loading" || gpt.status === "loading";
+  const anyError = bert.status === "error" || t5.status === "error" || gpt.status === "error";
 
   return (
     <PageShell
       eyebrow="Module · 03"
       title="Tokenizer Playground"
-      subtitle="Three algorithms, one sentence. WordPiece (BERT) uses ## for continuations. SentencePiece (T5) marks word-starts with ▁. BPE (GPT) merges byte pairs greedily."
+      subtitle="Real BERT, T5, and GPT-2 tokenizers running locally in your browser via ONNX/WASM. Type anything — the same text gets tokenized three different ways."
     >
+      {/* loaders for each model */}
+      {!allReady && (
+        <div className="grid lg:grid-cols-3 gap-5 mb-8">
+          {bert.status !== "ready" && (
+            <ModelLoader
+              status={bert.status}
+              events={bert.events}
+              errorMsg={bert.error ?? undefined}
+              modelId="bert-base-uncased"
+            />
+          )}
+          {t5.status !== "ready" && (
+            <ModelLoader
+              status={t5.status}
+              events={t5.events}
+              errorMsg={t5.error ?? undefined}
+              modelId="t5-small"
+            />
+          )}
+          {gpt.status !== "ready" && (
+            <ModelLoader
+              status={gpt.status}
+              events={gpt.events}
+              errorMsg={gpt.error ?? undefined}
+              modelId="gpt2"
+            />
+          )}
+        </div>
+      )}
+
       {/* input */}
       <div className="glass-strong rounded-2xl p-5 mb-6">
         <label className="text-[10px] uppercase tracking-[0.2em] font-mono text-accent-cyan block mb-2">
-          Input text
+          Input text · {allReady ? "live" : anyLoading ? "loading models…" : "tokenizers not ready"}
         </label>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           className="w-full bg-ink-950/60 border border-ink-700 rounded-lg px-4 py-3 font-mono text-ink-50 focus:outline-none focus:border-accent-cyan transition"
+          disabled={anyLoading}
         />
         <div className="flex flex-wrap gap-2 mt-3">
           {PRESETS.map((p) => (
@@ -58,25 +124,31 @@ export default function Tokenizer() {
       {/* three panes */}
       <div className="grid lg:grid-cols-3 gap-5">
         <TokenPane
-          accent="cyan"
-          title="WordPiece"
-          subtitle="BERT · 30,522 tokens"
-          marker={<><span className="font-mono text-accent-cyan">##prefix</span> = sub-piece</>}
-          result={results.wp}
+          accent={MODELS[0].accent}
+          title={MODELS[0].title}
+          subtitle={MODELS[0].subtitle}
+          marker={MODELS[0].marker}
+          tokenizer={bert.value}
+          input={input}
+          algorithm="wordpiece"
         />
         <TokenPane
-          accent="violet"
-          title="SentencePiece"
-          subtitle="T5 · 32,128 tokens"
-          marker={<><span className="font-mono text-accent-violet">▁prefix</span> = word-start</>}
-          result={results.sp}
+          accent={MODELS[1].accent}
+          title={MODELS[1].title}
+          subtitle={MODELS[1].subtitle}
+          marker={MODELS[1].marker}
+          tokenizer={t5.value}
+          input={input}
+          algorithm="sentencepiece"
         />
         <TokenPane
-          accent="coral"
-          title="BPE"
-          subtitle="GPT-2 · 50,257 tokens"
-          marker={<><span className="font-mono text-accent-coral">Ġprefix</span> = leading space</>}
-          result={results.bpe}
+          accent={MODELS[2].accent}
+          title={MODELS[2].title}
+          subtitle={MODELS[2].subtitle}
+          marker={MODELS[2].marker}
+          tokenizer={gpt.value}
+          input={input}
+          algorithm="bpe"
         />
       </div>
 
@@ -88,39 +160,33 @@ export default function Tokenizer() {
             <p className="font-semibold text-accent-cyan mb-2">WordPiece</p>
             <p>
               Splits unknown words into longest-known prefix, then continues with{" "}
-              <span className="font-mono">##</span>-prefixed sub-pieces. The <em>first</em> piece
-              has no prefix; continuations do.
+              <span className="font-mono">##</span>-prefixed sub-pieces.
             </p>
           </div>
           <div>
             <p className="font-semibold text-accent-violet mb-2">SentencePiece</p>
             <p>
               Treats whitespace as a regular symbol, encoded as{" "}
-              <span className="font-mono">▁</span>. Word-starts carry the marker; continuations
-              don&apos;t. This makes detokenization a pure string-join.
+              <span className="font-mono">▁</span>. Word-starts carry the marker.
             </p>
           </div>
           <div>
             <p className="font-semibold text-accent-coral mb-2">BPE</p>
             <p>
-              Starts from characters and iteratively merges the most frequent adjacent pair from a
-              learned merge table. Tends to produce smaller chunks for rare words.
+              Starts from bytes and iteratively merges the most frequent adjacent pair from a
+              learned merge table.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mt-8 glass-strong rounded-2xl p-7 border-l-4 border-accent-amber">
-        <p className="text-[10px] uppercase tracking-[0.2em] font-mono text-accent-amber mb-2">
-          Note
-        </p>
-        <p className="text-ink-200 text-sm leading-relaxed">
-          These are <em>simplified</em> in-browser implementations with a tiny vocab — they
-          reproduce the <em>shape</em> of each algorithm, not the exact splits of a production
-          checkpoint. For exact tokenization, use{" "}
-          <span className="font-mono">transformers.AutoTokenizer</span>.
-        </p>
-      </div>
+      {anyError && (
+        <div className="mt-6 glass-strong rounded-2xl p-5 border-l-4 border-accent-coral">
+          <p className="text-sm text-accent-coral font-mono">
+            One or more tokenizers failed to load. Check your network / browser console.
+          </p>
+        </div>
+      )}
     </PageShell>
   );
 }
@@ -130,13 +196,17 @@ function TokenPane({
   title,
   subtitle,
   marker,
-  result,
+  tokenizer,
+  input,
+  algorithm,
 }: {
   accent: "cyan" | "violet" | "coral";
   title: string;
   subtitle: string;
   marker: React.ReactNode;
-  result: ReturnType<typeof tokenizeWordPiece>;
+  tokenizer: any;
+  input: string;
+  algorithm: "wordpiece" | "sentencepiece" | "bpe";
 }) {
   const colorClass =
     accent === "cyan"
@@ -144,6 +214,26 @@ function TokenPane({
       : accent === "violet"
       ? "text-accent-violet"
       : "text-accent-coral";
+
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [vocabSize, setVocabSize] = useState(0);
+
+  useEffect(() => {
+    if (!tokenizer || !input) {
+      setTokens([]);
+      return;
+    }
+    try {
+      const ids: number[] = tokenizer.encode(input, { add_special_tokens: false });
+      const raw: string[] = ids.map((id: number) => tokenizer.decode([id], { skip_special_tokens: false }));
+      const out = idsToTokens(ids, raw, tokenizer, algorithm);
+      setTokens(out);
+      setVocabSize(tokenizer.model?.vocab?.length ?? tokenizer.vocab_size ?? 0);
+    } catch (e) {
+      console.warn("tokenization failed:", e);
+      setTokens([]);
+    }
+  }, [tokenizer, input, algorithm]);
 
   return (
     <div className="glass-strong rounded-2xl p-5 flex flex-col gap-4">
@@ -156,19 +246,72 @@ function TokenPane({
       </div>
 
       <div className="flex-1 min-h-[140px]">
-        <TokenChips tokens={result.tokens} accent={accent} />
+        {tokenizer ? (
+          tokens.length > 0 ? (
+            <TokenChips tokens={tokens} accent={accent} />
+          ) : (
+            <p className="text-xs font-mono text-ink-500">type to tokenize…</p>
+          )
+        ) : (
+          <p className="text-xs font-mono text-ink-500">loading tokenizer…</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-3 border-t border-ink-700/40">
         <div>
           <p className="text-ink-400">Tokens</p>
-          <p className={`text-lg font-bold ${colorClass}`}>{result.tokens.length}</p>
+          <p className={`text-lg font-bold ${colorClass}`}>{tokens.length}</p>
         </div>
         <div>
-          <p className="text-ink-400">Vocab hits</p>
-          <p className="text-lg font-bold text-ink-100">{result.vocabHits}</p>
+          <p className="text-ink-400">Vocab size</p>
+          <p className="text-lg font-bold text-ink-100">{vocabSize ? vocabSize.toLocaleString() : "—"}</p>
         </div>
       </div>
     </div>
   );
+}
+
+/**
+ * Convert token IDs + decoded surface strings into our Token type, recognising
+ * the continuation markers each algorithm uses.
+ */
+function idsToTokens(
+  ids: number[],
+  decoded: string[],
+  tokenizer: any,
+  algorithm: "wordpiece" | "sentencepiece" | "bpe"
+): Token[] {
+  // Convert IDs to the raw token strings (including ## / ▁ / Ġ markers if present)
+  const surface: string[] = ids.map((id: number) => {
+    try {
+      const arr = tokenizer.model.convert_ids_to_tokens
+        ? tokenizer.model.convert_ids_to_tokens([id])
+        : tokenizer.convert_ids_to_tokens?.([id]) ?? null;
+      return arr ? arr[0] : decoded[ids.indexOf(id)] ?? String(id);
+    } catch {
+      return decoded[ids.indexOf(id)] ?? String(id);
+    }
+  });
+
+  return surface.map((tok, i) => {
+    let display = tok;
+    let isContinuation = false;
+    if (algorithm === "wordpiece") {
+      isContinuation = tok.startsWith("##");
+      display = tok;
+    } else if (algorithm === "sentencepiece") {
+      // SentencePiece uses ▁ (U+2581) for word starts
+      isContinuation = !tok.startsWith("▁") && i > 0;
+      display = tok;
+    } else if (algorithm === "bpe") {
+      // GPT-2 BPE uses Ġ (U+0120) for the start of a new word
+      isContinuation = !tok.startsWith("Ġ") && i > 0;
+      display = tok;
+    }
+    return {
+      text: display,
+      isContinuation,
+      raw: tok,
+    };
+  });
 }
