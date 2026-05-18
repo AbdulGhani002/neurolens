@@ -120,6 +120,11 @@ NeuroLens addresses all three by making the architecture and its behaviour *visi
 ## Team
 
 Built by the AI-23 NLP-Lab-10 group, NUTECH Islamabad.
+Zain Ul Abidin F23607031
+Hamza AK F23607046
+Abdul Ghani F23607005
+Usman Nasir F23607004
+Ahad Imran F23607034
 
 ---
 
